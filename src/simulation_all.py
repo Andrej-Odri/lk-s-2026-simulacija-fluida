@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from essential_functions import Univerzalna_Advekcija, Univerzalna_Difuzija, IndexMap, vectorB, Matrica_A, IzracunajPritisak
+from essential_functions import *
 import matplotlib.animation as animation
 from scipy.sparse.linalg import cg
 
@@ -28,19 +28,19 @@ A_sistem = Matrica_A(tip_celije)
 brzina_x = np.zeros((N, N+1))
 brzina_y = np.zeros((N+1, N))
 
-# Početni mehur brzine
-centar_i, centar_j = N // 2, N // 4
-radijus = 5
+# Choose one preset
 
-for i in range(brzina_x.shape[0]):
-    for j in range(brzina_x.shape[1]):
-        if (i - centar_i)**2 + (j - centar_j)**2 < radijus**2:
-            brzina_x[i, j] = 10.0
+# initialize_blob(brzina_x, brzina_y, N)
 
-for i in range(brzina_y.shape[0]):
-    for j in range(brzina_y.shape[1]):
-        if (i - centar_i)**2 + (j - centar_j)**2 < radijus**2:
-            brzina_y[i, j] = 10.0
+# initialize_single_vortex(brzina_x, brzina_y, N, h)
+
+# initialize_double_vortex(brzina_x, brzina_y, N, h)
+
+# initialize_four_vortices(brzina_x, brzina_y, N, h)
+
+initialize_shear_layer(brzina_x, brzina_y, 8, N)
+
+# initialize_taylor_green(brzina_x, brzina_y, N, h)
 
 # Koordinate za Quiver
 X, Y = np.meshgrid(np.arange(N), np.arange(N))
@@ -48,7 +48,7 @@ X, Y = np.meshgrid(np.arange(N), np.arange(N))
 fig, ax = plt.subplots(figsize=(8, 8))
 
 P_prikaz = np.zeros((N, N))
-im = ax.imshow(P_prikaz, cmap='jet', origin='upper', extent=[-0.5, N-0.5, N-0.5, -0.5])
+im = ax.imshow(P_prikaz, cmap='jet', origin='upper', extent=[-0.5, N-0.5, N-0.5, -0.5], vmin=-5.0, vmax=5.0)
 kviver = ax.quiver(X, Y, np.zeros((N, N)), np.zeros((N, N)), color='white', scale=100, width=0.003)
 
 ax.set_xlim(-0.5, N-0.5)
@@ -61,7 +61,7 @@ fig.colorbar(im, ax=ax, label="Pritisak (P)")
 # ==========================================================
 def update(frejm):
     global brzina_x, brzina_y
-    
+
     # KORAK 1: Vektor B preko tvoje funkcije
     b_vektor = vectorB(tip_celije, brzina_x, brzina_y, rho, dt, h)
     
@@ -102,13 +102,12 @@ def update(frejm):
     
     # Osvežavanje ekrana
     im.set_array(P_matrica)
-    im.set_clim(vmin=np.min(P_matrica), vmax=np.max(P_matrica)) 
     kviver.set_UVC(U_centar, -V_centar)
     title.set_text(f"Fluid Simulacija | Pritisak i Brzina | Frejm {frejm}")
     
     return im, kviver, title
 
-ani = animation.FuncAnimation(fig, update, frames=500, interval=20, blit=False, repeat=False)
+ani = animation.FuncAnimation(fig, update, frames=100, interval=5, blit=False, repeat=False)
 ##plt.show()
 
 # --- ČUVANJE U GIF ---

@@ -177,3 +177,160 @@ def IzracunajPritisak(matrica_a, b_vektor, mapa_indexa, tip_celije, tol = 1e-5):
                 P_matrica[i, j] = P_vektor[int(idx)]
                 
     return P_matrica
+
+def add_vortex(brzina_x, brzina_y, cx, cy, radius, strength, h):
+
+    eps = 1e-8
+
+    # X velocities (vertical faces)
+    for i in range(brzina_x.shape[0]):
+        for j in range(brzina_x.shape[1]):
+
+            x = j * h
+            y = (i + 0.5) * h
+
+            dx = x - cx
+            dy = y - cy
+
+            r = np.sqrt(dx*dx + dy*dy)
+
+            if r < radius:
+
+                factor = (1.0 - np.exp(-(r / radius)**2)) / (r + eps)
+
+                brzina_x[i, j] += -strength * dy * factor
+
+    # Y velocities (horizontal faces)
+    for i in range(brzina_y.shape[0]):
+        for j in range(brzina_y.shape[1]):
+
+            x = (j + 0.5) * h
+            y = i * h
+
+            dx = x - cx
+            dy = y - cy
+
+            r = np.sqrt(dx*dx + dy*dy)
+
+            if r < radius:
+
+                factor = (1.0 - np.exp(-(r / radius)**2)) / (r + eps)
+
+                brzina_y[i, j] += strength * dx * factor
+
+def initialize_blob(brzina_x, brzina_y, N):
+
+    brzina_x.fill(0)
+    brzina_y.fill(0)
+
+    centar_i = N // 2
+    centar_j = N // 4
+    radijus = 5
+
+    for i in range(brzina_x.shape[0]):
+        for j in range(brzina_x.shape[1]):
+            if (i-centar_i)**2 + (j-centar_j)**2 < radijus**2:
+                brzina_x[i,j] = 10
+
+    for i in range(brzina_y.shape[0]):
+        for j in range(brzina_y.shape[1]):
+            if (i-centar_i)**2 + (j-centar_j)**2 < radijus**2:
+                brzina_y[i,j] = 10
+
+def initialize_single_vortex(brzina_x, brzina_y, N, h):
+
+    brzina_x.fill(0)
+    brzina_y.fill(0)
+
+    add_vortex(
+        brzina_x,
+        brzina_y,
+        N*h*0.5,
+        N*h*0.5,
+        0.8,
+        40,
+        h
+    )   
+
+def initialize_double_vortex(brzina_x, brzina_y, N, h):
+
+    brzina_x.fill(0)
+    brzina_y.fill(0)
+
+    add_vortex(brzina_x, brzina_y,
+               N*h*0.30,
+               N*h*0.50,
+               0.6,
+               40,
+               h)
+
+    add_vortex(brzina_x, brzina_y,
+               N*h*0.70,
+               N*h*0.50,
+               0.6,
+               -40,
+               h)
+
+def initialize_four_vortices(brzina_x, brzina_y, N, h):
+
+    brzina_x.fill(0)
+    brzina_y.fill(0)
+
+    vortices = [
+        (0.30,0.30,40),
+        (0.70,0.30,-40),
+        (0.30,0.70,-40),
+        (0.70,0.70,40)
+    ]
+
+    for px,py,s in vortices:
+        add_vortex(
+            brzina_x,
+            brzina_y,
+            N*h*px,
+            N*h*py,
+            0.45,
+            s,
+            h
+        )
+
+def initialize_shear_layer(brzina_x, brzina_y, strength, N):
+
+    brzina_x.fill(0)
+    brzina_y.fill(0)
+
+    for i in range(N):
+
+        if i < N//2:
+            brzina_x[i,:] = strength
+
+        else:
+            brzina_x[i,:] = -strength
+
+def initialize_taylor_green(brzina_x, brzina_y, N, h):
+
+    brzina_x.fill(0)
+    brzina_y.fill(0)
+
+    U0 = 20
+    L = N*h
+
+    # u velocity
+    for i in range(brzina_x.shape[0]):
+        for j in range(brzina_x.shape[1]):
+
+            x = j*h
+            y = (i+0.5)*h
+
+            brzina_x[i,j] = U0*np.sin(2*np.pi*x/L) * \
+                            np.cos(2*np.pi*y/L)
+
+    # v velocity
+    for i in range(brzina_y.shape[0]):
+        for j in range(brzina_y.shape[1]):
+
+            x = (j+0.5)*h
+            y = i*h
+
+            brzina_y[i,j] = -U0*np.cos(2*np.pi*x/L) * \
+                             np.sin(2*np.pi*y/L)
