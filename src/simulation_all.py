@@ -49,6 +49,7 @@ fig, ax = plt.subplots(figsize=(8, 8))
 
 P_prikaz = np.zeros((N, N))
 im = ax.imshow(P_prikaz, cmap='jet', origin='upper', extent=[-0.5, N-0.5, N-0.5, -0.5], vmin=-5.0, vmax=5.0)
+im = ax.imshow(P_prikaz, cmap='jet', origin='upper', extent=[-0.5, N-0.5, N-0.5, -0.5], vmin=-5.0, vmax=5.0)
 kviver = ax.quiver(X, Y, np.zeros((N, N)), np.zeros((N, N)), color='white', scale=100, width=0.003)
 
 ax.set_xlim(-0.5, N-0.5)
@@ -96,12 +97,40 @@ def update(frejm):
     brzina_x = Univerzalna_Difuzija(bx_advektovano, ni, dt, h)
     brzina_y = Univerzalna_Difuzija(by_advektovano, ni, dt, h)
     
+
+
+    #METRIKE SE OVDE OBRADJUJU!!!
+
+    #---------DIVERGENCIJA------------
+
+    div = 0
+    for i in range(1, N-1):
+        for j in range(1, N-1):
+            
+            d = (brzina_x[i, j+1] - brzina_x[i, j]) + (brzina_y[i+1, j] - brzina_y[i, j])
+    
+            div += abs(d)
+
+    #---------VORTLOCITET-------------
+
+    ukupni_vorticitet = 0.0
+    for i in range(N-1):
+        for j in range(N-1):
+            rotacija = ((brzina_y[i, j+1] - brzina_y[i, j]) / h) - ((brzina_x[i+1, j] - brzina_x[i, j]) / h)
+            ukupni_vorticitet += abs(rotacija)
+
+    print(f"--- DIVERGENCIJA --- | --- VORTICITET ---")
+    print(f"{div:.3f}        |      {ukupni_vorticitet:.3f}")
+
+
     # Srednje brzine za strelice
     U_centar = (brzina_x[:, :-1] + brzina_x[:, 1:]) / 2.0
     V_centar = (brzina_y[:-1, :] + brzina_y[1:, :]) / 2.0
     
+
     # Osvežavanje ekrana
     im.set_array(P_matrica)
+
     kviver.set_UVC(U_centar, -V_centar)
     title.set_text(f"Fluid Simulacija | Pritisak i Brzina | Frejm {frejm}")
     
@@ -112,11 +141,11 @@ ani = animation.FuncAnimation(fig, update, frames=100, interval=5, blit=False, r
 
 # --- ČUVANJE U GIF ---
 print("Učitavam frejmove i pravim GIF... (ovo može potrajati malo)")
-
+ 
 # Kreiramo writer objekat (fps=30 znači 30 frejmova u sekundi)
 writer = animation.PillowWriter(fps=30)
 
 # Čuvamo animaciju pod imenom 'simulacija_fluida.gif'
-ani.save('simulacija_fluida.gif', writer=writer)
+ani.save('simulacija_fluida_120fps_kratka.gif', writer=writer)
 
-print("GIF uspešno sačuvan kao 'simulacija_fluida.gif'!")
+print("GIF uspešno sačuvan kao 'simulacija_fluida.gif'!")"""
