@@ -63,7 +63,7 @@ def update(frejm):
     global brzina_x, brzina_y
     
     # KORAK 1: Vektor B preko tvoje funkcije
-    b_vektor = vectorB(tip_celije, brzina_x, brzina_y, rho, dt)
+    b_vektor = vectorB(tip_celije, brzina_x, brzina_y, rho, dt, h)
     
     # KORAK 2: Poziv TVOJE funkcije za računanje 2D matrice pritiska
     P_matrica = IzracunajPritisak(A_sistem, b_vektor, mapa_indexa, tip_celije, tol=1e-5)
@@ -73,14 +73,21 @@ def update(frejm):
 
     # KORAK 3: Korekcija brzina (Zamenjeni minusi u pluseve zbog usaglašavanja znaka pritiska)
     # KORAK 3: Korekcija brzina (Vraćamo minuse jer smo sredili znak u vectorB)
-    for i in range(1, N-1):
-        for j in range(1, N):
-            brzina_x[i, j] = brzina_x[i, j] - (dt / (rho * h)) * (P_matrica[i, j] - P_matrica[i, j-1])
+    # KORAK 3: Korekcija brzina (Pressure Projection)
+    for i in range(N):
+        for j in range(1, N): # brzina_x je velicine (N, N+1)
+            # Brzina se menja samo ako su obe susedne celije koje dele ivicu fluid
+            if tip_celije[i, j] != 0 and tip_celije[i, j-1] != 0:
+                brzina_x[i, j] = brzina_x[i, j] - (dt / (rho * h)) * (P_matrica[i, j] - P_matrica[i, j-1])
+            else:
+                brzina_x[i, j] = 0.0 # ODRŽAVAMO ZID TVRDIM
             
-    for i in range(1, N):
-        for j in range(1, N-1):
-            brzina_y[i, j] = brzina_y[i, j] - (dt / (rho * h)) * (P_matrica[i, j] - P_matrica[i-1, j])
-
+    for i in range(1, N): # brzina_y je velicine (N+1, N)
+        for j in range(N):
+            if tip_celije[i, j] != 0 and tip_celije[i-1, j] != 0:
+                brzina_y[i, j] = brzina_y[i, j] - (dt / (rho * h)) * (P_matrica[i, j] - P_matrica[i-1, j])
+            else:
+                brzina_y[i, j] = 0.0
     # KORAK 4: Advekcija
     bx_advektovano = Univerzalna_Advekcija(brzina_x, brzina_x, brzina_y, 'x_ivica', dt, h)
     by_advektovano = Univerzalna_Advekcija(brzina_y, brzina_x, brzina_y, 'y_ivica', dt, h)
@@ -101,10 +108,10 @@ def update(frejm):
     
     return im, kviver, title
 
-ani = animation.FuncAnimation(fig, update, frames=150, interval=20, blit=False, repeat=False)
-plt.show()
+ani = animation.FuncAnimation(fig, update, frames=500, interval=20, blit=False, repeat=False)
+##plt.show()
 
-"""# --- ČUVANJE U GIF ---
+# --- ČUVANJE U GIF ---
 print("Učitavam frejmove i pravim GIF... (ovo može potrajati malo)")
 
 # Kreiramo writer objekat (fps=30 znači 30 frejmova u sekundi)
@@ -113,4 +120,4 @@ writer = animation.PillowWriter(fps=30)
 # Čuvamo animaciju pod imenom 'simulacija_fluida.gif'
 ani.save('simulacija_fluida.gif', writer=writer)
 
-print("GIF uspešno sačuvan kao 'simulacija_fluida.gif'!")"""
+print("GIF uspešno sačuvan kao 'simulacija_fluida.gif'!")

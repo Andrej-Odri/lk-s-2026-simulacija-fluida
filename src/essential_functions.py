@@ -136,35 +136,29 @@ def Matrica_A(tip_celije):
                 
     return matrica_a
 
-def vectorB(tip_celije, brzina_x, brzina_y, rho, dt):
+def vectorB(tip_celije, brzina_x, brzina_y, rho, dt, h):
     tip_celije = np.array(tip_celije)
     mapa_indexa = IndexMap(tip_celije)
-    
     N = int(np.max(mapa_indexa) + 1)
-    
     b = np.zeros(N)
+    broj_redova, broj_kolona = mapa_indexa.shape
 
-    _, n = mapa_indexa.shape
-
-    for i in range(n):
-        for j in range(n):
-
-            if (mapa_indexa[i,j] != -1) :
-
+    for i in range(broj_redova):
+        for j in range(broj_kolona):
+            if mapa_indexa[i,j] != -1:
                 u_levo = brzina_x[i, j]
-                u_desno =brzina_x[i, j+1]
-                v_gore = brzina_y[i,j]
-                v_dole = brzina_y[i+1,j]
+                u_desno = brzina_x[i, j+1]
+                v_gore = brzina_y[i, j]
+                v_dole = brzina_y[i+1, j]
 
-                if(tip_celije[i, j-1] == 0): u_levo = 0.0
-                if(tip_celije[i, j+1] == 0): u_desno = 0.0
-                if(tip_celije[i-1, j] == 0): v_gore = 0.0
-                if(tip_celije[i+1, j] == 0): v_dole = 0.0
+                if tip_celije[i, j-1] == 0: u_levo = 0.0
+                if tip_celije[i, j+1] == 0: u_desno = 0.0
+                if tip_celije[i-1, j] == 0: v_gore = 0.0
+                if tip_celije[i+1, j] == 0: v_dole = 0.0
 
                 divegencija = (u_desno - u_levo) + (v_dole - v_gore)
-
-                b[int(mapa_indexa[i,j])] = -(rho / dt) * divegencija
-
+                
+                b[int(mapa_indexa[i,j])] = (rho * h / dt) * divegencija
     return b
 
 def IzracunajPritisak(matrica_a, b_vektor, mapa_indexa, tip_celije, tol = 1e-5):
