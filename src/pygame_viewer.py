@@ -54,6 +54,18 @@ def parse_args():
         default=5.0,
         help="Pressure magnitude mapped to full color intensity.",
     )
+    parser.add_argument(
+        "--curl-scale",
+        type=float,
+        default=80.0,
+        help="Curl magnitude mapped to full color intensity.",
+    )
+    parser.add_argument(
+        "--view",
+        choices=["pressure", "curl"],
+        default="pressure",
+        help="Initial scalar field to display.",
+    )
     return parser.parse_args()
 
 
@@ -66,6 +78,19 @@ def pressure_to_rgb(pressure, pressure_scale):
     rgb[..., 0] = (35 + 220 * positive).astype(np.uint8)
     rgb[..., 1] = (45 + 150 * (1.0 - np.abs(normalized))).astype(np.uint8)
     rgb[..., 2] = (55 + 200 * negative).astype(np.uint8)
+    return rgb
+
+
+def curl_to_rgb(curl, curl_scale):
+    normalized = np.clip(curl / curl_scale, -1.0, 1.0)
+    positive = np.clip(normalized, 0.0, 1.0)
+    negative = np.clip(-normalized, 0.0, 1.0)
+    magnitude = np.abs(normalized)
+
+    rgb = np.empty((*curl.shape, 3), dtype=np.uint8)
+    rgb[..., 0] = (20 + 235 * positive).astype(np.uint8)
+    rgb[..., 1] = (20 + 180 * (1.0 - magnitude)).astype(np.uint8)
+    rgb[..., 2] = (20 + 235 * negative).astype(np.uint8)
     return rgb
 
 
@@ -117,6 +142,7 @@ def main():
 
     paused = False
     running = True
+    view_mode = args.view
     fps = 0.0
     timings = {
         "events_ms": 0.0,
@@ -143,8 +169,10 @@ def main():
     metrics_every = max(1, args.metrics_every)
     metric_values = {
         "divergence": 0.0,
+        "curl": 0.0,
         "vorticity": 0.0,
         "divergence_avg": 0.0,
+        "curl_avg": 0.0,
         "vorticity_avg": 0.0,
         "cfl": 0.0,
         "max_speed": 0.0,
@@ -164,6 +192,8 @@ def main():
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                elif event.key == pygame.K_c:
+                    view_mode = "curl" if view_mode == "pressure" else "pressure"
                 elif event.key == pygame.K_r:
                     simulation.reset()
                 else:
@@ -197,8 +227,10 @@ def main():
             metrics_start = time.perf_counter()
             current_metrics = simulation.accuracy_metrics()
             metric_values["divergence"] = current_metrics["divergence"]
+            metric_values["curl"] = current_metrics["curl"]
             metric_values["vorticity"] = current_metrics["vorticity"]
             metric_values["divergence_avg"] = current_metrics["divergence"] / metric_cell_count
+            metric_values["curl_avg"] = current_metrics["curl"] / metric_cell_count
             metric_values["vorticity_avg"] = current_metrics["vorticity"] / metric_cell_count
             metric_values["cfl"] = current_metrics["cfl"]
             metric_values["max_speed"] = current_metrics["max_speed"]
@@ -206,7 +238,10 @@ def main():
             timings["metrics_ms"] = (time.perf_counter() - metrics_start) * 1000.0
 
         rgb_start = time.perf_counter()
-        rgb = pressure_to_rgb(simulation.pressure, args.pressure_scale)
+        if view_mode == "curl":
+            rgb = curl_to_rgb(simulation.curl_field(), args.curl_scale)
+        else:
+            rgb = pressure_to_rgb(simulation.pressure, args.pressure_scale)
         timings["rgb_ms"] = (time.perf_counter() - rgb_start) * 1000.0
 
         scale_start = time.perf_counter()
@@ -233,7 +268,7 @@ def main():
         text_start = time.perf_counter()
         status = "paused" if paused else "running"
         lines = [
-            f"{simulation.preset} | frame {simulation.frame} | {status} | fps {fps:5.1f}",
+            f"{simulation.preset} | {view_mode} | frame {simulation.frame} | {status} | fps {fps:5.1f}",
             "simulation timing (ms)",
             f"rhs        {last_step_timings['rhs_ms']:6.2f}",
             f"pressure   {last_step_timings['pressure_ms']:6.2f}",
@@ -245,6 +280,8 @@ def main():
             "accuracy metrics",
             f"div total  {metric_values['divergence']:9.3f}",
             f"div avg    {metric_values['divergence_avg']:9.5f}",
+            f"curl total {metric_values['curl']:9.3f}",
+            f"curl avg   {metric_values['curl_avg']:9.5f}",
             f"vort total {metric_values['vorticity']:9.3f}",
             f"vort avg   {metric_values['vorticity_avg']:9.5f}",
             f"cfl        {metric_values['cfl']:9.5f}",
@@ -262,7 +299,7 @@ def main():
             f"frame      {timings['frame_ms']:6.2f}",
         ]
         draw_text_lines(screen, font, lines, 10, 10)
-        help_lines = ["space pause | r reset | 1-6 presets | hold L/R stream | esc quit"]
+        help_lines = ["space pause | c pressure/curl | r reset | 1-6 presets | hold L/R stream | esc quit"]
         draw_text_lines(screen, small_font, help_lines, 10, args.size - 32)
         timings["text_ms"] = (time.perf_counter() - text_start) * 1000.0
 

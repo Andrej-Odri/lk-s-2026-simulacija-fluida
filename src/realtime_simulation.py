@@ -260,6 +260,19 @@ class FluidSimulation:
         u_center, v_center = self.centered_velocity()
         return np.sqrt(u_center**2 + v_center**2)
 
+    def curl_field(self):
+        curl = np.zeros((self.n, self.n))
+        curl[: self.n - 1, : self.n - 1] = (
+            (self.velocity_y[: self.n - 1, 1:self.n] - self.velocity_y[: self.n - 1, : self.n - 1])
+            / self.h
+            - (
+                self.velocity_x[1:self.n, : self.n - 1]
+                - self.velocity_x[: self.n - 1, : self.n - 1]
+            )
+            / self.h
+        )
+        return curl
+
     def metrics(self):
         values = self.accuracy_metrics()
         return values["divergence"], values["vorticity"]
@@ -272,25 +285,19 @@ class FluidSimulation:
             - self.velocity_y[1 : self.n - 1, 1:-1]
         )
 
-        vorticity = (
-            (self.velocity_y[: self.n - 1, 1:self.n] - self.velocity_y[: self.n - 1, : self.n - 1])
-            / self.h
-            - (
-                self.velocity_x[1:self.n, : self.n - 1]
-                - self.velocity_x[: self.n - 1, : self.n - 1]
-            )
-            / self.h
-        )
+        curl = self.curl_field()
 
         u_center, v_center = self.centered_velocity()
         speed_squared = u_center**2 + v_center**2
         fluid_speed_squared = speed_squared[self.fluid_mask]
         max_speed = float(np.sqrt(np.max(fluid_speed_squared))) if fluid_speed_squared.size else 0.0
         kinetic_energy = 0.5 * self.density * float(np.sum(fluid_speed_squared)) * (self.h**2)
+        curl_total = float(np.sum(np.abs(curl[: self.n - 1, : self.n - 1])))
 
         return {
             "divergence": float(np.sum(np.abs(divergence))),
-            "vorticity": float(np.sum(np.abs(vorticity))),
+            "curl": curl_total,
+            "vorticity": curl_total,
             "cfl": max_speed * self.dt / self.h,
             "max_speed": max_speed,
             "kinetic_energy": kinetic_energy,
