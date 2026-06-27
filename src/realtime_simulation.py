@@ -1,9 +1,10 @@
 import numpy as np
 from time import perf_counter
-from scipy.sparse import lil_matrix
+from scipy.sparse import lil_matrix, csr_matrix
 from scipy.sparse.linalg import factorized
+import metrics
 
-from essential_functions import (
+from essential_functions import(
     IndexMap,
     Univerzalna_Advekcija,
     Univerzalna_Difuzija,
@@ -14,6 +15,8 @@ from essential_functions import (
     initialize_shear_layer,
     initialize_single_vortex,
     initialize_taylor_green,
+    Matrica_A,
+    vectorB
 )
 
 
@@ -157,28 +160,23 @@ class FluidSimulation:
         return None
 
     def _build_sparse_system_matrix(self):
-        unknown_count = int(np.max(self.index_map) + 1)
-        matrix = lil_matrix((unknown_count, unknown_count), dtype=float)
 
-        rows, columns = self.index_map.shape
-        for i in range(rows):
-            for j in range(columns):
-                row_index = int(self.index_map[i, j])
-                if row_index == -1:
-                    continue
+        gusta_matrica = Matrica_A(self.cell_type)
+        retka_matrica = csr_matrix(gusta_matrica)
 
-                neighbor_count = 0
-                for ni, nj in ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)):
-                    if self.cell_type[ni, nj] == 1:
-                        neighbor_count += 1
-                        matrix[row_index, int(self.index_map[ni, nj])] = 1.0
-                    elif self.cell_type[ni, nj] == 2:
-                        neighbor_count += 1
+        return retka_matrica
 
-                matrix[row_index, row_index] = -neighbor_count
+    def _pressure_rhs(self):
 
-        return matrix.tocsr()
-
+        return vectorB(
+            self.cell_type, 
+            self.velocity_x, 
+            self.velocity_y, 
+            self.density, 
+            self.dt, 
+            self.h
+        )
+    
     def _build_anchored_pressure_matrix(self):
         anchored = self.system_matrix.tolil(copy=True)
         anchored[0, :] = 0.0
@@ -274,31 +272,12 @@ class FluidSimulation:
         return curl
 
     def metrics(self):
-        values = self.accuracy_metrics()
-        return values["divergence"], values["vorticity"]
+        divergence = metrics.DivergenceMetric(self.velocity_x, self.velocity_y)
 
-    def accuracy_metrics(self):
-        divergence = (
-            self.velocity_x[1:-1, 2:self.n]
-            - self.velocity_x[1:-1, 1 : self.n - 1]
-            + self.velocity_y[2:self.n, 1:-1]
-            - self.velocity_y[1 : self.n - 1, 1:-1]
-        )
+        vorticity, curl = metrics.Vorticity(self.velocity_x, self.velocity_y, self.h)
 
-        curl = self.curl_field()
+        kinetic_energy = metrics.KineticEnergy(self.velocity_x, self.velocity_y, self.density)
 
-        u_center, v_center = self.centered_velocity()
-        speed_squared = u_center**2 + v_center**2
-        fluid_speed_squared = speed_squared[self.fluid_mask]
-        max_speed = float(np.sqrt(np.max(fluid_speed_squared))) if fluid_speed_squared.size else 0.0
-        kinetic_energy = 0.5 * self.density * float(np.sum(fluid_speed_squared)) * (self.h**2)
-        curl_total = float(np.sum(np.abs(curl[: self.n - 1, : self.n - 1])))
+        cfl = metrics.CourantFriedrichLewy(self.velocity_x, self.velocity_y, self.dt, self.h)
 
-        return {
-            "divergence": float(np.sum(np.abs(divergence))),
-            "curl": curl_total,
-            "vorticity": curl_total,
-            "cfl": max_speed * self.dt / self.h,
-            "max_speed": max_speed,
-            "kinetic_energy": kinetic_energy,
-        }
+        return divergence, vorticity, curl, kinetic_energy, cfl

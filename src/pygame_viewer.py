@@ -222,20 +222,7 @@ def main():
         if not paused:
             last_step_timings = simulation.step(args.substeps, profile=True)
             timings["sim_total_ms"] = last_step_timings["total_ms"]
-
-        if simulation.frame % metrics_every == 0:
-            metrics_start = time.perf_counter()
-            current_metrics = simulation.accuracy_metrics()
-            metric_values["divergence"] = current_metrics["divergence"]
-            metric_values["curl"] = current_metrics["curl"]
-            metric_values["vorticity"] = current_metrics["vorticity"]
-            metric_values["divergence_avg"] = current_metrics["divergence"] / metric_cell_count
-            metric_values["curl_avg"] = current_metrics["curl"] / metric_cell_count
-            metric_values["vorticity_avg"] = current_metrics["vorticity"] / metric_cell_count
-            metric_values["cfl"] = current_metrics["cfl"]
-            metric_values["max_speed"] = current_metrics["max_speed"]
-            metric_values["kinetic_energy"] = current_metrics["kinetic_energy"]
-            timings["metrics_ms"] = (time.perf_counter() - metrics_start) * 1000.0
+            divergencija_metrika, vorticitet_metrika, curl, kinetic_energy, cfl = simulation.metrics()
 
         rgb_start = time.perf_counter()
         if view_mode == "curl":
@@ -277,16 +264,12 @@ def main():
             f"diffuse    {last_step_timings['diffusion_ms']:6.2f}",
             f"walls      {last_step_timings['walls_ms']:6.2f}",
             f"sim total  {timings['sim_total_ms']:6.2f}",
-            "accuracy metrics",
-            f"div total  {metric_values['divergence']:9.3f}",
-            f"div avg    {metric_values['divergence_avg']:9.5f}",
-            f"curl total {metric_values['curl']:9.3f}",
-            f"curl avg   {metric_values['curl_avg']:9.5f}",
-            f"vort total {metric_values['vorticity']:9.3f}",
-            f"vort avg   {metric_values['vorticity_avg']:9.5f}",
-            f"cfl        {metric_values['cfl']:9.5f}",
-            f"max speed  {metric_values['max_speed']:9.3f}",
-            f"kin energy {metric_values['kinetic_energy']:9.3f}",
+            f"BENCHMARK METRIKE",
+            f"div metrika {divergencija_metrika:.2f}",
+            f"vorticitet metrika {vorticitet_metrika:.2f}",
+            f"curl metrika {curl:.2f}",
+            f"kinetic energy {kinetic_energy:.2f}",
+            f"cfl {cfl:.2f}",
             "render timing (ms)",
             f"events     {timings['events_ms']:6.2f}",
             f"stream     {timings['stream_ms']:6.2f}",
