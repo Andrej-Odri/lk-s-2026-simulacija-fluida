@@ -1,10 +1,10 @@
 import numpy as np
 from time import perf_counter
 from scipy.sparse import lil_matrix
+from scipy.sparse.linalg import factorized
 
 from essential_functions import (
     IndexMap,
-    IzracunajPritisak,
     Univerzalna_Advekcija,
     Univerzalna_Difuzija,
     add_vortex,
@@ -53,6 +53,8 @@ class FluidSimulation:
 
         self.index_map = IndexMap(self.cell_type)
         self.system_matrix = self._build_sparse_system_matrix()
+        self.pressure_solver = factorized(self._build_anchored_pressure_matrix())
+        self.fluid_mask = self.index_map != -1
 
         self.velocity_x = np.zeros((n, n + 1))
         self.velocity_y = np.zeros((n + 1, n))
@@ -99,13 +101,7 @@ class FluidSimulation:
             timings["rhs_ms"] += (perf_counter() - step_start) * 1000.0
 
             step_start = perf_counter()
-            self.pressure = IzracunajPritisak(
-                self.system_matrix,
-                b_vector,
-                self.index_map,
-                self.cell_type,
-                tol=1e-5,
-            )
+            self.pressure = self._solve_pressure(b_vector)
             timings["pressure_ms"] += (perf_counter() - step_start) * 1000.0
 
             step_start = perf_counter()
@@ -183,58 +179,61 @@ class FluidSimulation:
 
         return matrix.tocsr()
 
+    def _build_anchored_pressure_matrix(self):
+        anchored = self.system_matrix.tolil(copy=True)
+        anchored[0, :] = 0.0
+        anchored[0, 0] = 1.0
+        return anchored.tocsc()
+
+    def _solve_pressure(self, b_vector):
+        anchored_b = b_vector.copy()
+        anchored_b[0] = 0.0
+        pressure_vector = self.pressure_solver(anchored_b)
+
+        pressure = np.zeros(self.cell_type.shape)
+        pressure[self.fluid_mask] = pressure_vector[self.index_map[self.fluid_mask]]
+        pressure[self.fluid_mask] -= np.mean(pressure[self.fluid_mask])
+        return pressure
+
     def _pressure_rhs(self):
         unknown_count = int(np.max(self.index_map) + 1)
         b_vector = np.zeros(unknown_count)
 
-        rows, columns = self.index_map.shape
-        for i in range(rows):
-            for j in range(columns):
-                index = int(self.index_map[i, j])
-                if index == -1:
-                    continue
+        u_left = self.velocity_x[:, :-1].copy()
+        u_right = self.velocity_x[:, 1:].copy()
+        v_top = self.velocity_y[:-1, :].copy()
+        v_bottom = self.velocity_y[1:, :].copy()
 
-                u_left = self.velocity_x[i, j]
-                u_right = self.velocity_x[i, j + 1]
-                v_top = self.velocity_y[i, j]
-                v_bottom = self.velocity_y[i + 1, j]
+        u_left[:, 1:] = np.where(self.cell_type[:, :-1] == 0, 0.0, u_left[:, 1:])
+        u_right[:, :-1] = np.where(self.cell_type[:, 1:] == 0, 0.0, u_right[:, :-1])
+        v_top[1:, :] = np.where(self.cell_type[:-1, :] == 0, 0.0, v_top[1:, :])
+        v_bottom[:-1, :] = np.where(self.cell_type[1:, :] == 0, 0.0, v_bottom[:-1, :])
 
-                if self.cell_type[i, j - 1] == 0:
-                    u_left = 0.0
-                if self.cell_type[i, j + 1] == 0:
-                    u_right = 0.0
-                if self.cell_type[i - 1, j] == 0:
-                    v_top = 0.0
-                if self.cell_type[i + 1, j] == 0:
-                    v_bottom = 0.0
-
-                divergence = (u_right - u_left) + (v_bottom - v_top)
-                b_vector[index] = (self.density * self.h / self.dt) * divergence
+        divergence = (u_right - u_left) + (v_bottom - v_top)
+        b_vector[self.index_map[self.fluid_mask]] = (
+            self.density * self.h / self.dt
+        ) * divergence[self.fluid_mask]
 
         return b_vector
 
     def _project_pressure(self):
-        for i in range(self.n):
-            for j in range(1, self.n):
-                if self.cell_type[i, j] != 0 and self.cell_type[i, j - 1] != 0:
-                    self.velocity_x[i, j] -= (
-                        self.dt
-                        / (self.density * self.h)
-                        * (self.pressure[i, j] - self.pressure[i, j - 1])
-                    )
-                else:
-                    self.velocity_x[i, j] = 0.0
+        pressure_scale = self.dt / (self.density * self.h)
 
-        for i in range(1, self.n):
-            for j in range(self.n):
-                if self.cell_type[i, j] != 0 and self.cell_type[i - 1, j] != 0:
-                    self.velocity_y[i, j] -= (
-                        self.dt
-                        / (self.density * self.h)
-                        * (self.pressure[i, j] - self.pressure[i - 1, j])
-                    )
-                else:
-                    self.velocity_y[i, j] = 0.0
+        x_mask = (self.cell_type[:, 1:] != 0) & (self.cell_type[:, :-1] != 0)
+        x_delta = pressure_scale * (self.pressure[:, 1:] - self.pressure[:, :-1])
+        self.velocity_x[:, 1:self.n] = np.where(
+            x_mask,
+            self.velocity_x[:, 1:self.n] - x_delta,
+            0.0,
+        )
+
+        y_mask = (self.cell_type[1:, :] != 0) & (self.cell_type[:-1, :] != 0)
+        y_delta = pressure_scale * (self.pressure[1:, :] - self.pressure[:-1, :])
+        self.velocity_y[1:self.n, :] = np.where(
+            y_mask,
+            self.velocity_y[1:self.n, :] - y_delta,
+            0.0,
+        )
 
     def _enforce_walls(self):
         self.velocity_x[:, 0] = 0.0
@@ -262,6 +261,10 @@ class FluidSimulation:
         return np.sqrt(u_center**2 + v_center**2)
 
     def metrics(self):
+        values = self.accuracy_metrics()
+        return values["divergence"], values["vorticity"]
+
+    def accuracy_metrics(self):
         divergence = (
             self.velocity_x[1:-1, 2:self.n]
             - self.velocity_x[1:-1, 1 : self.n - 1]
@@ -279,4 +282,16 @@ class FluidSimulation:
             / self.h
         )
 
-        return float(np.sum(np.abs(divergence))), float(np.sum(np.abs(vorticity)))
+        u_center, v_center = self.centered_velocity()
+        speed_squared = u_center**2 + v_center**2
+        fluid_speed_squared = speed_squared[self.fluid_mask]
+        max_speed = float(np.sqrt(np.max(fluid_speed_squared))) if fluid_speed_squared.size else 0.0
+        kinetic_energy = 0.5 * self.density * float(np.sum(fluid_speed_squared)) * (self.h**2)
+
+        return {
+            "divergence": float(np.sum(np.abs(divergence))),
+            "vorticity": float(np.sum(np.abs(vorticity))),
+            "cfl": max_speed * self.dt / self.h,
+            "max_speed": max_speed,
+            "kinetic_energy": kinetic_energy,
+        }

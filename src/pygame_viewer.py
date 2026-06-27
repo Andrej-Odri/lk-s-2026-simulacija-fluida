@@ -31,6 +31,12 @@ def parse_args():
     parser.add_argument("--max-fps", type=int, default=0, help="0 means uncapped.")
     parser.add_argument("--frames", type=int, default=0, help="Quit after N frames. 0 means run forever.")
     parser.add_argument(
+        "--metrics-every",
+        type=int,
+        default=5,
+        help="Recompute divergence and vorticity every N frames.",
+    )
+    parser.add_argument(
         "--stream-strength",
         type=float,
         default=6.0,
@@ -115,6 +121,7 @@ def main():
     timings = {
         "events_ms": 0.0,
         "stream_ms": 0.0,
+        "metrics_ms": 0.0,
         "sim_total_ms": 0.0,
         "rgb_ms": 0.0,
         "scale_ms": 0.0,
@@ -133,6 +140,17 @@ def main():
         "walls_ms": 0.0,
         "total_ms": 0.0,
     }
+    metrics_every = max(1, args.metrics_every)
+    metric_values = {
+        "divergence": 0.0,
+        "vorticity": 0.0,
+        "divergence_avg": 0.0,
+        "vorticity_avg": 0.0,
+        "cfl": 0.0,
+        "max_speed": 0.0,
+        "kinetic_energy": 0.0,
+    }
+    metric_cell_count = max(1, int(np.count_nonzero(simulation.fluid_mask)))
 
     while running:
         frame_start = time.perf_counter()
@@ -175,6 +193,18 @@ def main():
             last_step_timings = simulation.step(args.substeps, profile=True)
             timings["sim_total_ms"] = last_step_timings["total_ms"]
 
+        if simulation.frame % metrics_every == 0:
+            metrics_start = time.perf_counter()
+            current_metrics = simulation.accuracy_metrics()
+            metric_values["divergence"] = current_metrics["divergence"]
+            metric_values["vorticity"] = current_metrics["vorticity"]
+            metric_values["divergence_avg"] = current_metrics["divergence"] / metric_cell_count
+            metric_values["vorticity_avg"] = current_metrics["vorticity"] / metric_cell_count
+            metric_values["cfl"] = current_metrics["cfl"]
+            metric_values["max_speed"] = current_metrics["max_speed"]
+            metric_values["kinetic_energy"] = current_metrics["kinetic_energy"]
+            timings["metrics_ms"] = (time.perf_counter() - metrics_start) * 1000.0
+
         rgb_start = time.perf_counter()
         rgb = pressure_to_rgb(simulation.pressure, args.pressure_scale)
         timings["rgb_ms"] = (time.perf_counter() - rgb_start) * 1000.0
@@ -212,9 +242,18 @@ def main():
             f"diffuse    {last_step_timings['diffusion_ms']:6.2f}",
             f"walls      {last_step_timings['walls_ms']:6.2f}",
             f"sim total  {timings['sim_total_ms']:6.2f}",
+            "accuracy metrics",
+            f"div total  {metric_values['divergence']:9.3f}",
+            f"div avg    {metric_values['divergence_avg']:9.5f}",
+            f"vort total {metric_values['vorticity']:9.3f}",
+            f"vort avg   {metric_values['vorticity_avg']:9.5f}",
+            f"cfl        {metric_values['cfl']:9.5f}",
+            f"max speed  {metric_values['max_speed']:9.3f}",
+            f"kin energy {metric_values['kinetic_energy']:9.3f}",
             "render timing (ms)",
             f"events     {timings['events_ms']:6.2f}",
             f"stream     {timings['stream_ms']:6.2f}",
+            f"metrics    {timings['metrics_ms']:6.2f}",
             f"rgb        {timings['rgb_ms']:6.2f}",
             f"scale      {timings['scale_ms']:6.2f}",
             f"quiver     {timings['quiver_ms']:6.2f}",
