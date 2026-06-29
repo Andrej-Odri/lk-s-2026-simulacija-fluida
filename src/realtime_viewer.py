@@ -7,9 +7,15 @@ import numpy as np
 from realtime_simulation import FluidSimulation, PRESETS
 
 
+def to_numpy(array):
+    if hasattr(array, "get"):
+        return array.get()
+    return np.asarray(array)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Real-time 2D fluid simulation viewer.")
-    parser.add_argument("--n", type=int, default=32, help="Grid size.")
+    parser.add_argument("--n", type=int, default=128, help="Grid size.")
     parser.add_argument("--dt", type=float, default=0.01, help="Simulation time step.")
     parser.add_argument("--h", type=float, default=0.1, help="Cell size.")
     parser.add_argument("--viscosity", type=float, default=0.08, help="Fluid viscosity.")
@@ -96,7 +102,7 @@ def main():
     fig.canvas.manager.set_window_title("Real-time Fluid Simulation")
 
     pressure_image = ax.imshow(
-        simulation.pressure,
+        to_numpy(simulation.pressure),
         cmap="turbo",
         origin="upper",
         extent=[-0.5, args.n - 0.5, args.n - 0.5, -0.5],
@@ -105,6 +111,8 @@ def main():
     )
 
     u_center, v_center = simulation.centered_velocity()
+    u_center = to_numpy(u_center)
+    v_center = to_numpy(v_center)
     velocity_quiver = None
     if not args.no_quiver:
         speed = np.sqrt(u_center**2 + v_center**2)
@@ -142,9 +150,11 @@ def main():
     def redraw():
         frame_start = time.perf_counter()
         artists_start = time.perf_counter()
-        pressure_image.set_array(simulation.pressure)
+        pressure_image.set_array(to_numpy(simulation.pressure))
         if velocity_quiver is not None:
             u_center, v_center = simulation.centered_velocity()
+            u_center = to_numpy(u_center)
+            v_center = to_numpy(v_center)
             speed = np.sqrt(u_center**2 + v_center**2)
             velocity_quiver.set_UVC(
                 u_center[::quiver_stride, ::quiver_stride],

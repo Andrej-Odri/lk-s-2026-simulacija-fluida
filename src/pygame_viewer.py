@@ -7,9 +7,15 @@ import pygame
 from realtime_simulation import FluidSimulation, PRESETS
 
 
+def to_numpy(array):
+    if hasattr(array, "get"):
+        return array.get()
+    return np.asarray(array)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Fast Pygame viewer for the fluid simulation.")
-    parser.add_argument("--n", type=int, default=32, help="Grid size.")
+    parser.add_argument("--n", type=int, default=128, help="Grid size.")
     parser.add_argument("--dt", type=float, default=0.01, help="Simulation time step.")
     parser.add_argument("--h", type=float, default=0.1, help="Cell size.")
     parser.add_argument("--viscosity", type=float, default=0.08, help="Fluid viscosity.")
@@ -52,6 +58,7 @@ def parse_args():
 
 
 def pressure_to_rgb(pressure, pressure_scale):
+    pressure = to_numpy(pressure)
     normalized = np.clip(pressure / pressure_scale, -1.0, 1.0)
     positive = np.clip(normalized, 0.0, 1.0)
     negative = np.clip(-normalized, 0.0, 1.0)
@@ -65,6 +72,8 @@ def pressure_to_rgb(pressure, pressure_scale):
 
 def draw_velocity_arrows(surface, simulation, viewport_size, stride):
     u_center, v_center = simulation.centered_velocity()
+    u_center = to_numpy(u_center)
+    v_center = to_numpy(v_center)
     cell_size = viewport_size / simulation.n
     scale = cell_size * 0.13
 
